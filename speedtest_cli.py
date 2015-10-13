@@ -25,7 +25,7 @@ import timeit
 import platform
 import threading
 
-__version__ = '0.3.4'
+__version__ = '0.3.5_poser'
 
 # Some global variables we use
 user_agent = None
@@ -593,6 +593,10 @@ def speedtest():
     parser.add_argument('--version', action='store_true',
                         help='Show the version number and exit')
 
+    parser.add_argument('--repeat', default=1, type=int,help='repeat times for testing')                       
+                        
+    parser.add_argument('--round', default=0, type=int,help='additional times for average')
+
     options = parser.parse_args()
     if isinstance(options, tuple):
         args = options[0]
@@ -628,7 +632,7 @@ def speedtest():
     if not args.simple:
         print_('Retrieving speedtest.net server list...')
     if args.list or args.server:
-        servers = closestServers(config['client'], True)
+        servers = closestServers(config['client'])
         if args.list:
             serverList = []
             for server in servers:
@@ -707,34 +711,51 @@ def speedtest():
                '%(latency)s ms' % best).encode('utf-8', 'ignore'))
     else:
         print_('Ping: %(latency)s ms' % best)
-
+        
+    dlspeed = []
+    ulspeed = []
     sizes = [350, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000]
     urls = []
-    for size in sizes:
-        for i in range(0, 4):
-            urls.append('%s/random%sx%s.jpg' %
-                        (os.path.dirname(best['url']), size, size))
-    if not args.simple:
-        print_('Testing download speed', end='')
-    dlspeed = downloadSpeed(urls, args.simple)
-    if not args.simple:
-        print_()
-    print_('Download: %0.2f M%s/s' %
-           ((dlspeed / 1000 / 1000) * args.units[1], args.units[0]))
+    
+    for repeat in range(0,args.repeat+args.round*2):        
+        for size in sizes:
+            for i in range(0, 4):
+                urls.append('%s/random%sx%s.jpg' %
+                            (os.path.dirname(best['url']), size, size))
+        if not args.simple:
+            print_('Testing download speed', end='')
+        dlspeed.append(downloadSpeed(urls, args.simple))
+        if not args.simple:
+            print_()
+        print_('Download: %0.2f M%s/s' %
+               ((dlspeed[repeat] / 1000 / 1000) * args.units[1], args.units[0]))
 
-    sizesizes = [int(.25 * 1000 * 1000), int(.5 * 1000 * 1000)]
-    sizes = []
-    for size in sizesizes:
-        for i in range(0, 25):
-            sizes.append(size)
-    if not args.simple:
-        print_('Testing upload speed', end='')
-    ulspeed = uploadSpeed(best['url'], sizes, args.simple)
-    if not args.simple:
-        print_()
-    print_('Upload: %0.2f M%s/s' %
-           ((ulspeed / 1000 / 1000) * args.units[1], args.units[0]))
+        sizesizes = [int(.25 * 1000 * 1000), int(.5 * 1000 * 1000)]
+        sizes = []
+        for size in sizesizes:
+            for i in range(0, 25):
+                sizes.append(size)
+        if not args.simple:
+            print_('Testing upload speed', end='')
+        ulspeed.append(uploadSpeed(best['url'], sizes, args.simple))
+        if not args.simple:
+            print_()
+        print_('Upload: %0.2f M%s/s' %
+               ((ulspeed[repeat] / 1000 / 1000) * args.units[1], args.units[0]))
 
+    if (args.repeat > 1) or (args.round > 0):
+        dlspeed = sorted(dlspeed)
+        ulspeed = sorted(ulspeed)
+        
+        dlspeed = dlspeed[args.round:args.repeat+args.round]
+        ulspeed = ulspeed[args.round:args.repeat+args.round]
+        
+        print_('Download average: %0.2f M%s/s' %
+               ((sum(dlspeed)/len(dlspeed) / 1000 / 1000) * args.units[1], args.units[0]))
+        print_('Download average: %0.2f M%s/s' %
+               ((sum(ulspeed)/len(ulspeed) / 1000 / 1000) * args.units[1], args.units[0]))
+               
+               
     if args.share and args.mini:
         print_('Cannot generate a speedtest.net share results image while '
                'testing against a Speedtest Mini server')
